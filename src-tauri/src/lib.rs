@@ -1,3 +1,5 @@
+use xplane_ws::XPlaneConnectionState;
+
 mod backend;
 mod xplane_ws;
 mod xplane_rest;
@@ -9,39 +11,30 @@ fn greet(name: &str) -> String {
 }
 
 #[tauri::command]
-async fn connect_to_xplane() -> Result<String, String> {
+async fn connect_to_xplane() -> Result<XPlaneConnectionState, String> {
     use tokio::join;
 
     // Executa as operações simultaneamente
     let (ws_result, datarefs_result) = join!(
         xplane_ws::connect_to_xplane(),
-        xplane_rest::list_datarefs()
+        xplane_rest::fetch_datarefs()
     );
 
-    // Verifica se a conexão WebSocket foi bem-sucedida
-    if let Err(e) = ws_result {
-        return Err(format!("Erro ao conectar ao X-Plane via WebSocket: {}", e));
-    }
+    // Verifica o estado da conexão WebSocket
+    let ws_state = ws_result.map_err(|e| e.to_string())?; // Obtém o estado da conexão
+    println!("WebSocket: {}", ws_state.message);
 
     // Verifica o resultado da listagem de datarefs
-    match datarefs_result {
-        Ok(datarefs) => {
-            println!("Lista de DataRefs disponíveis:");
-            for dataref in datarefs {
-                println!(
-                    "- {} (Writable: {}) - Type: {}",
-                    dataref.name,
-                    dataref.is_writable, // Campo correto
-                    dataref.value_type
-                );
-            }
-            Ok("Conexão e listagem de DataRefs concluídas com sucesso.".to_string())
-        }
-        Err(e) => Err(format!(
-            "Conexão WebSocket estabelecida, mas falha ao listar DataRefs: {}",
-            e
-        )),
+    let datarefs = datarefs_result.map_err(|e| e.to_string())?;
+    println!("Lista de DataRefs disponíveis:");
+    for dataref in datarefs {
+        println!(
+            "- {} (Writable: {}) - Type: {}",
+            dataref.name, dataref.is_writable, dataref.value_type
+        );
     }
+
+    Ok(ws_state)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
