@@ -1,11 +1,14 @@
 mod backend;
 mod infrastructure;
 mod domain;
+mod application;
+
 
 use infrastructure::xplane_rest;
 use infrastructure::xplane_ws;
 use infrastructure::xplane_ws::XPlaneConnectionState;
 use domain::systems::electrical::battery;
+use application::useCases::connect_to_xplane::ConnectToXPlaneUseCase;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
@@ -17,27 +20,12 @@ fn greet(name: &str) -> String {
 async fn connect_to_xplane() -> Result<XPlaneConnectionState, String> {
     use tokio::join;
 
-    // Executa as operações simultaneamente
-    let (ws_result, datarefs_result) = join!(
-        xplane_ws::connect_to_xplane(),
-        xplane_rest::fetch_datarefs()
-    );
+    let mut use_case = ConnectToXPlaneUseCase::new();
 
-    // Verifica o estado da conexão WebSocket
-    let ws_state = ws_result.map_err(|e| e.to_string())?; // Obtém o estado da conexão
-    println!("WebSocket: {}", ws_state.message);
-
-    // Verifica o resultado da listagem de datarefs
-    let datarefs = datarefs_result.map_err(|e| e.to_string())?;
-    println!("Lista de DataRefs disponíveis:");
-    for dataref in datarefs {
-        println!(
-            "- {} (Writable: {}) - Type: {}",
-            dataref.name, dataref.is_writable, dataref.value_type
-        );
+    match use_case.execute().await {
+        Ok(state) => Ok(state),
+        Err(err) => Err(format!("Erro na conexão: {}", err)),
     }
-
-    Ok(ws_state)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
