@@ -1,8 +1,11 @@
-use xplane_ws::XPlaneConnectionState;
-
 mod backend;
-mod xplane_ws;
-mod xplane_rest;
+mod infrastructure;
+mod domain;
+
+use infrastructure::xplane_rest;
+use infrastructure::xplane_ws;
+use infrastructure::xplane_ws::XPlaneConnectionState;
+use domain::systems::electrical::battery;
 
 // Learn more about Tauri commands at https://tauri.app/develop/calling-rust/
 #[tauri::command]
