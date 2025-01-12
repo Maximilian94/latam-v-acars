@@ -2,7 +2,6 @@ use std::sync::Arc;
 
 use crate::domain::systems::electrical::battery::{BatteryPushButton, BatteryState};
 use crate::infrastructure::{xplane_ws, xplane_rest};
-use crate::infrastructure::xplane_ws::XPlaneConnectionState;
 use tokio::join;
 use futures_util::StreamExt;
 use tokio::sync::oneshot;
@@ -20,9 +19,11 @@ impl ConnectToXPlaneUseCase {
         }
     }
 
-    pub async fn execute(&mut self) -> Result<XPlaneConnectionState, String> {
+    pub async fn execute(&mut self) -> Result<(), String> {
+        let mut xplane_client = xplane_ws::XPlaneClient::new();
+
         let (ws_result, datarefs_result) = join!(
-            xplane_ws::connect_to_xplane(),
+            xplane_client.connect("ws://localhost:8086/api/v1"),
             xplane_rest::fetch_datarefs()
         );
 
@@ -34,6 +35,15 @@ impl ConnectToXPlaneUseCase {
             .ok_or("DataRef da bateria não encontrado")?;
 
         println!("DataRef da bateria encontrado: ID {}", battery_dataref.id);
+
+        xplane_client
+            .subscribe(battery_dataref.id, Some(serde_json::json!(0)), 9998)
+            .await
+            .map_err(|e| e.to_string())?;
+
+            // Processar mensagens recebidas do WebSocket
+        println!("Iniciando processamento de mensagens...");
+        xplane_client.process_messages().await;
 
         let (tx, rx) = oneshot::channel();
 

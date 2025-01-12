@@ -6,7 +6,6 @@ mod application;
 
 use infrastructure::xplane_rest;
 use infrastructure::xplane_ws;
-use infrastructure::xplane_ws::XPlaneConnectionState;
 use domain::systems::electrical::battery;
 use application::useCases::connect_to_xplane::ConnectToXPlaneUseCase;
 
@@ -17,7 +16,7 @@ fn greet(name: &str) -> String {
 }
 
 #[tauri::command]
-async fn connect_to_xplane() -> Result<XPlaneConnectionState, String> {
+async fn connect_to_xplane() -> Result<(), String> {
     use tokio::join;
 
     let mut use_case = ConnectToXPlaneUseCase::new();
