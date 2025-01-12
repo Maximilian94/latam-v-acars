@@ -1,3 +1,4 @@
+use serde::Deserialize;
 use tokio_tungstenite::tungstenite::protocol::Message;
 use tokio_tungstenite::connect_async;
 use tokio_tungstenite::WebSocketStream;
@@ -9,9 +10,33 @@ use serde::Serialize;
 use serde_json::json;
 use url::Url;
 use anyhow::{Result, Context};
+use std::collections::HashMap;
+
+use crate::battery::BatteryState;
 
 type WebSocketWrite = SplitSink<WebSocketStream<tokio_tungstenite::MaybeTlsStream<TcpStream>>, Message>;
 type WebSocketRead = SplitStream<WebSocketStream<tokio_tungstenite::MaybeTlsStream<TcpStream>>>;
+
+#[derive(Debug, Deserialize)]
+#[serde(tag = "type")]
+pub enum WebSocketResponse {
+    #[serde(rename = "result")]
+    ResultMessage {
+        req_id: u64,
+        success: bool,
+    },
+    #[serde(rename = "dataref_update_values")]
+    DataRefUpdate {
+        data: HashMap<String, Value>,
+    },
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum Value {
+    Single(f64),
+    Array(Vec<f64>),
+}
 
 pub struct XPlaneClient {
     write: Option<WebSocketWrite>,
@@ -19,7 +44,6 @@ pub struct XPlaneClient {
 }
 
 impl XPlaneClient {
-    /// Cria uma nova instância de XPlaneClient
     pub fn new() -> Self {
         Self {
             write: None,
@@ -27,7 +51,6 @@ impl XPlaneClient {
         }
     }
 
-    /// Conecta ao WebSocket do X-Plane
     pub async fn connect(&mut self, url: &str) -> Result<()> {
         let parsed_url = Url::parse(url).context("Erro ao parsear URL do WebSocket")?;
 
@@ -42,7 +65,6 @@ impl XPlaneClient {
         Ok(())
     }
 
-    /// Subscrição ao DataRef
     pub async fn subscribe(&mut self, dataref_id: u64, index: Option<serde_json::Value>, req_id: u64) -> Result<()> {
         if let Some(write) = &mut self.write {
             let subscription = json!({
@@ -72,13 +94,36 @@ impl XPlaneClient {
         }
     }
 
-    /// Processa mensagens recebidas
     pub async fn process_messages(&mut self) {
         if let Some(read) = &mut self.read {
             while let Some(Ok(message)) = read.next().await {
                 match message {
                     Message::Text(text) => {
-                        println!("Mensagem recebida: {}", text);
+                        match serde_json::from_str::<WebSocketResponse>(&text) {
+                            Ok(WebSocketResponse::ResultMessage { req_id, success }) => {
+                                println!("Mensagem de resultado recebida: req_id={}, success={}", req_id, success);
+                            }
+                            Ok(WebSocketResponse::DataRefUpdate { data }) => {
+                                println!("Mensagem de atualização recebida: {:?}", data);
+                                for (id, value) in data {
+                                    match value {
+                                        Value::Single(v) => {
+                                            println!("ID: {}, Valor único: {}", id, v);
+                                            if id == "2158853277856" {
+                                                let battery_state = convert_battery_state(v);
+                                                println!("Estado da bateria convertido: {:?}", battery_state);
+                                            }
+                                        }
+                                        Value::Array(values) => {
+                                            println!("ID: {}, Valores do array: {:?}", id, values);
+                                        }
+                                    }
+                                }
+                            }
+                            Err(err) => {
+                                println!("Erro ao deserializar mensagem: {}", err);
+                            }
+                        }
                     }
                     _ => {
                         println!("Mensagem desconhecida recebida.");
@@ -88,5 +133,15 @@ impl XPlaneClient {
         } else {
             println!("WebSocket não conectado. Não há mensagens para processar.");
         }
+    }
+    
+    
+}
+
+pub fn convert_battery_state(value: f64) -> BatteryState {
+    match value {
+        1.0 => BatteryState::Auto,
+        0.0 => BatteryState::Off,
+        _ => BatteryState::Unknown,
     }
 }
