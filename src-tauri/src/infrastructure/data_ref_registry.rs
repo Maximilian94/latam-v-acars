@@ -52,31 +52,30 @@ impl DataRefBehavior for AirbusFBWBatOHPArray {
 }
 
 pub struct DataRefRegistry {
-    datarefs: HashMap<String, Box<dyn DataRefBehavior + Send + Sync>>,
+    pub datarefs: HashMap<String, Box<dyn DataRefBehavior + Send + Sync>>,
+    pub id_to_name: HashMap<u64, String>, // mapeamento de ID para nome do DataRef
 }
 
 impl DataRefRegistry {
     pub fn new() -> Self {
         let mut datarefs = HashMap::new();
+        let mut id_to_name = HashMap::new();
         
         let airbus_fbw_bat_ohp_array = AirbusFBWBatOHPArray::new();
 
         datarefs.insert("AirbusFBW/BatOHPArray".to_string(), Box::new(airbus_fbw_bat_ohp_array) as Box<dyn DataRefBehavior + Send + Sync>);
 
         Self {
-            datarefs: datarefs,
+            datarefs,
+            id_to_name
         }
     }
 
     pub fn update_dataref_id(&mut self, datarefs: Vec<DataRef>) {
         for dataref in datarefs {
             if let Some(obj) = self.datarefs.get_mut(&dataref.name) {
-                // Faz o log do objeto encontrado
-                println!("Objeto encontrado para '{}': {:?}", dataref.name, obj.get_object_to_subscribe());
-
                 obj.set_id(dataref.id);
-
-                println!("Objeto encontrado para '{}': {:?}", dataref.name, obj.get_object_to_subscribe());
+                self.id_to_name.insert(dataref.id, dataref.name.clone());
             } else {
                 // Se não encontrado, exibe um aviso
                 // println!("Aviso: DataRef '{}' não encontrado no registro!", dataref.name);
